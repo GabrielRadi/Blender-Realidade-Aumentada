@@ -110,6 +110,17 @@
         this.active = false;
         this.dist1 = 2; // distance to center
         this.dist2 = 2;
+        this.loopCount = 0;
+        this.lastY = null;
+        this.outcomeTriggered = false;
+        this.hasCollided = false;
+        this.hiddenLoser = null;
+        this.reappearOnRestart = false;
+        this.pendingOutcome = false;
+        this.fadeOutCandidate = null;
+        this.fadeOutLoser = null;
+        this.fadeOutProgress = 1;
+        this.fadeOutActive = false;
         // Set initial positions
         if (this.gravity1) this.gravity1.setAttribute('position', `${this.pos1.x} ${this.pos1.y} ${this.pos1.z}`);
         if (this.gravity2) this.gravity2.setAttribute('position', `${this.pos2.x} ${this.pos2.y} ${this.pos2.z}`);
@@ -119,8 +130,53 @@
         if (!this.gravity1) this.gravity1 = this.el.querySelector('#gravity1');
         if (!this.gravity2) this.gravity2 = this.el.querySelector('#gravity2');
         if (!this.gravity1 || !this.gravity2) return;
+        if (this.fadeOutActive && this.fadeOutLoser) {
+          this.fadeOutProgress = Math.max(0, this.fadeOutProgress - delta / 1000);
+          const opacity = this.fadeOutProgress.toFixed(3);
+          this.fadeOutLoser.setAttribute('material', `opacity: ${opacity}; transparent: true`);
+          if (this.fadeOutLoser.object3D) {
+            this.fadeOutLoser.object3D.traverse(node => {
+              if (node.isMesh && node.material) {
+                node.material.transparent = true;
+                node.material.opacity = this.fadeOutProgress;
+              }
+            });
+          }
+          if (this.fadeOutProgress <= 0) {
+            this.fadeOutLoser.setAttribute('visible', 'false');
+            this.hiddenLoser = this.fadeOutLoser;
+            this.fadeOutLoser = null;
+            this.fadeOutActive = false;
+          }
+        }
+        if (this.phase === 1 && !this.outcomeTriggered && this.gravity1.object3D) {
+          const currentY = this.gravity1.object3D.rotation.y;
+          const normalizedY = ((currentY % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+          if (this.lastY !== null && normalizedY < this.lastY - 0.5) {
+            this.loopCount += 1;
+            if (this.loopCount >= 3) {
+              this.triggerOutcome();
+            }
+          }
+          this.lastY = normalizedY;
+        }
         this.timer += delta / 1000; // seconds
         if (this.phase === 0) { // moving - spiraling toward center
+          if (this.reappearOnRestart && this.hiddenLoser) {
+            this.hiddenLoser.setAttribute('visible', 'true');
+            this.hiddenLoser.setAttribute('material', 'opacity: 1; transparent: false');
+            if (this.hiddenLoser.object3D) {
+              this.hiddenLoser.object3D.traverse(node => {
+                if (node.isMesh && node.material) {
+                  node.material.transparent = false;
+                  node.material.opacity = 1;
+                }
+              });
+            }
+            this.hiddenLoser = null;
+            this.reappearOnRestart = false;
+            this.outcomeTriggered = false;
+          }
           const speed = 4; // angular speed
           const radiusDecay = 0.5; // how fast radius decreases
           const radius1 = Math.max(0.1, 2 - this.timer * radiusDecay);
@@ -135,10 +191,13 @@
           if (this.pos1.distanceTo(this.pos2) < 1.0) { // clash threshold
             this.phase = 1;
             this.timer = 0;
+            this.hasCollided = true;
           }
         } else if (this.phase === 1) { // clashing
           if (this.timer > 1) {
-            if (Math.random() < 0.2) { // 20% chance
+            if (this.pendingOutcome) {
+              this.phase = 3;
+            } else if (Math.random() < 0.2) { // 20% chance
               this.fadeTarget = Math.random() < 0.5 ? this.gravity1 : this.gravity2;
               this.phase = 2;
             } else {
@@ -154,7 +213,14 @@
             this.timer = 0;
           }
         } else if (this.phase === 3) { // reset
-          if (this.timer > 3) {
+          if (this.pendingOutcome && !this.fadeOutActive && this.timer > 3) {
+            this.fadeOutActive = true;
+            this.fadeOutProgress = 1;
+            this.fadeOutLoser = this.fadeOutCandidate;
+            this.fadeOutCandidate = null;
+            this.pendingOutcome = false;
+          }
+          if (!this.fadeOutActive && this.timer > 3) {
             this.pos1.copy(this.startPos1);
             this.pos2.copy(this.startPos2);
             this.gravity1.setAttribute('position', `${this.pos1.x} ${this.pos1.y} ${this.pos1.z}`);
@@ -166,6 +232,18 @@
             this.fadeTarget = null;
           }
         }
+      },
+      triggerOutcome: function() {
+        this.outcomeTriggered = true;
+        const loser = Math.random() < 0.5 ? this.gravity1 : this.gravity2;
+        if (loser) {
+          this.fadeOutCandidate = loser;
+          this.pendingOutcome = true;
+        }
+        this.loopCount = 0;
+        this.lastY = null;
+        this.hasCollided = false;
+        this.reappearOnRestart = true;
       }
     });
 
