@@ -212,30 +212,32 @@
     });
 
     // Add animation-mixer after models are loaded
+    const mixers = [];
     const models = ['model1', 'gravity1', 'gravity2', 'model3'];
     models.forEach(id => {
       const el = document.getElementById(id);
-      el.addEventListener('model-loaded', () => {
-        // Manual animation setup following Three.js order
-        const gltf = el.components['gltf-model'].gltfData;
-        if (gltf && gltf.animations && gltf.animations.length > 0) {
-          // 2. Instanciar o Mixer passando gltf.scene
-          const mixer = new THREE.AnimationMixer(gltf.scene);
-          // 3. Criar a Action com mixer.clipAction(gltf.animations[0])
-          const action = mixer.clipAction(gltf.animations[0]);
-          // 4. Chamar .play() na action
+      if (!el) return;
+      el.addEventListener('model-loaded', (event) => {
+        const gltfComp = el.components['gltf-model'];
+        const modelObject = (event.detail && event.detail.model) || (gltfComp && gltfComp.model) || el.getObject3D('mesh');
+        const gltf = gltfComp && (gltfComp.gltf || gltfComp.gltfData || (modelObject && modelObject.userData && modelObject.userData.gltf));
+        const animations = (gltf && gltf.animations) || (modelObject && modelObject.animations);
+        if (animations && animations.length > 0) {
+          const sceneObject = (gltf && gltf.scene) || modelObject;
+          const mixer = new THREE.AnimationMixer(sceneObject);
+          const action = mixer.clipAction(animations[0]);
           action.play();
-          // Store mixer for updating
           el.mixer = mixer;
-        }
-      });
-      // 5. Atualizar o mixer no loop principal
-      el.addEventListener('tick', (evt) => {
-        if (el.mixer) {
-          el.mixer.update(evt.delta / 1000); // Convert ms to seconds
+          mixers.push(mixer);
         }
       });
     });
+    const sceneEl = document.querySelector('a-scene');
+    if (sceneEl) {
+      sceneEl.addEventListener('tick', (evt) => {
+        mixers.forEach(mixer => mixer.update(evt.delta / 1000));
+      });
+    }
 
     // Atualiza todos os displays com o estado do marcador ativo
     function syncDisplays(state) {
@@ -276,7 +278,8 @@
     markerConfig.forEach(m => {
       if (m.name.includes('Kanji')) {
         m.el.addEventListener('markerFound', () => {
-          const comp = m.el.components['beyblade-battle'];
+          const battleEntity = m.el.querySelector('[beyblade-battle]');
+          const comp = battleEntity && battleEntity.components['beyblade-battle'];
           if (comp) {
             comp.active = true;
             comp.phase = 0;
@@ -285,7 +288,8 @@
           }
         });
         m.el.addEventListener('markerLost', () => {
-          const comp = m.el.components['beyblade-battle'];
+          const battleEntity = m.el.querySelector('[beyblade-battle]');
+          const comp = battleEntity && battleEntity.components['beyblade-battle'];
           if (comp) {
             comp.active = false;
             // Reset positions and opacity
