@@ -16,26 +16,22 @@
   <a-scene embedded arjs>
 
     <a-assets>
-      <a-asset-item id="lego2" src="./lego_velociraptor_and_baby.glb"></a-asset-item>
-      <a-asset-item id="atom_steel" src="./atom_steel.glb"></a-asset-item>
-      <a-asset-item id="midas_steel" src="./midasreal_steel.glb"></a-asset-item>
-      <a-asset-item id="gridlock_steel" src="./gridlockreal_steel.glb"></a-asset-item>
-      <a-asset-item id="gridpunch" src="./gridpunch.glb"></a-asset-item>
+      <a-asset-item id="gravity_destroyer" src="./gravity_destroyer_-_beyblade_metal_masters.glb"></a-asset-item>
     </a-assets>
 
-    <a-marker preset="arjs">
-      <a-entity id="model3" gltf-model="#gridpunch" rotation="-90 0 0" scale="1 1 1"></a-entity>
+    <a-marker preset="hiro">
+      <a-entity id="model3" gltf-model="#gravity_destroyer" rotation="0 0 0" scale="25 25 25" animation="property: rotation; to: 0 360 0; dur: 200; easing: linear; loop: true"></a-entity>
     </a-marker>
 
     <a-marker preset="kanji">
-      <a-entity rotation="-90 0 0">
-        <a-entity id="model2" gltf-model="#midas_steel" position="-0.5 -1.1 0" rotation="0 0 0" scale= "3 3 3" animation="property: rotation; to: 0 360 0; dur: 8000; easing: linear; loop: true"></a-entity>
-        <a-entity id="model2b" gltf-model="#gridlock_steel" position="0.5 -1.1 0" rotation="0 0 0" scale="1 1 1" animation="property: rotation; to: 0 360 0; dur: 8000; easing: linear; loop: true"></a-entity>
+      <a-entity rotation="-90 0 0" beyblade-battle>
+        <a-entity id="gravity1" gltf-model="#gravity_destroyer" position="-2 0 0" rotation="0 0 0" scale="25 25 25" animation="property: rotation; to: 0 360 0; dur: 200; easing: linear; loop: true"></a-entity>
+        <a-entity id="gravity2" gltf-model="#gravity_destroyer" position="2 0 0" rotation="0 0 0" scale="25 25 25" animation="property: rotation; to: 0 360 0; dur: 200; easing: linear; loop: true"></a-entity>
       </a-entity>
     </a-marker>
 
-    <a-marker preset="hiro">
-      <a-entity id="model1" gltf-model="#midas_steel" rotation="-90 0 0" scale="1 1 1"></a-entity>
+    <a-marker preset="arjs">
+      <a-entity id="model3" gltf-model="#gravity_destroyer" rotation="0 0 0" scale="25 25 25" animation="property: rotation; to: 0 360 0; dur: 200; easing: linear; loop: true"></a-entity>
     </a-marker>
 
     <a-entity camera></a-entity>
@@ -99,6 +95,80 @@
     const controls = document.getElementById('controls');
     const activeMarkerLabel = document.getElementById('active-marker-label');
 
+    // Register the beyblade battle component
+    AFRAME.registerComponent('beyblade-battle', {
+      init: function() {
+        this.gravity1 = this.el.querySelector('#gravity1');
+        this.gravity2 = this.el.querySelector('#gravity2');
+        this.phase = 0; // 0: moving, 1: clashing, 2: burst, 3: reset
+        this.timer = 0;
+        this.fadeTarget = null;
+        this.startPos1 = new THREE.Vector3(-2, 0, 0);
+        this.startPos2 = new THREE.Vector3(2, 0, 0);
+        this.pos1 = this.startPos1.clone();
+        this.pos2 = this.startPos2.clone();
+        this.active = false;
+        this.dist1 = 2; // distance to center
+        this.dist2 = 2;
+        // Set initial positions
+        if (this.gravity1) this.gravity1.setAttribute('position', `${this.pos1.x} ${this.pos1.y} ${this.pos1.z}`);
+        if (this.gravity2) this.gravity2.setAttribute('position', `${this.pos2.x} ${this.pos2.y} ${this.pos2.z}`);
+      },
+      tick: function(time, delta) {
+        if (!this.active) return;
+        if (!this.gravity1) this.gravity1 = this.el.querySelector('#gravity1');
+        if (!this.gravity2) this.gravity2 = this.el.querySelector('#gravity2');
+        if (!this.gravity1 || !this.gravity2) return;
+        this.timer += delta / 1000; // seconds
+        if (this.phase === 0) { // moving - spiraling toward center
+          const speed = 4; // angular speed
+          const radiusDecay = 0.5; // how fast radius decreases
+          const radius1 = Math.max(0.1, 2 - this.timer * radiusDecay);
+          const radius2 = Math.max(0.1, 2 - this.timer * radiusDecay);
+          const angle1 = Math.PI + this.timer * speed + Math.sin(this.timer * 1.5) * 0.3; // chaotic
+          const angle2 = 0 + this.timer * speed + Math.cos(this.timer * 1.5) * 0.3;
+          this.pos1.set(Math.cos(angle1) * radius1, 0, Math.sin(angle1) * radius1);
+          this.pos2.set(Math.cos(angle2) * radius2, 0, Math.sin(angle2) * radius2);
+          this.gravity1.setAttribute('position', `${this.pos1.x} ${this.pos1.y} ${this.pos1.z}`);
+          this.gravity2.setAttribute('position', `${this.pos2.x} ${this.pos2.y} ${this.pos2.z}`);
+          // Collision check
+          if (this.pos1.distanceTo(this.pos2) < 1.0) { // clash threshold
+            this.phase = 1;
+            this.timer = 0;
+          }
+        } else if (this.phase === 1) { // clashing
+          if (this.timer > 1) {
+            if (Math.random() < 0.2) { // 20% chance
+              this.fadeTarget = Math.random() < 0.5 ? this.gravity1 : this.gravity2;
+              this.phase = 2;
+            } else {
+              this.phase = 3;
+            }
+            this.timer = 0;
+          }
+        } else if (this.phase === 2) { // burst
+          const opacity = Math.max(0, 1 - this.timer * 2);
+          this.fadeTarget.setAttribute('material', `opacity: ${opacity}; transparent: true`);
+          if (opacity <= 0) {
+            this.phase = 3;
+            this.timer = 0;
+          }
+        } else if (this.phase === 3) { // reset
+          if (this.timer > 3) {
+            this.pos1.copy(this.startPos1);
+            this.pos2.copy(this.startPos2);
+            this.gravity1.setAttribute('position', `${this.pos1.x} ${this.pos1.y} ${this.pos1.z}`);
+            this.gravity2.setAttribute('position', `${this.pos2.x} ${this.pos2.y} ${this.pos2.z}`);
+            this.gravity1.setAttribute('material', 'opacity: 1; transparent: false');
+            this.gravity2.setAttribute('material', 'opacity: 1; transparent: false');
+            this.phase = 0;
+            this.timer = 0;
+            this.fadeTarget = null;
+          }
+        }
+      }
+    });
+
     // Cada marcador tem seu próprio modelo e estado independente
     const markerConfig = [
       {
@@ -108,16 +178,16 @@
         state: { scale: 1.0, pos: { x: 0, y: 0, z: 0 }, rot: { x: -90, y: 0, z: 0 } }
       },
       {
-        name: 'Kanji (atom_steel.glb)',
+        name: 'Kanji (gravity_destroyer x2)',
         el: document.querySelector('[preset="kanji"]'),
-        model: document.getElementById('model2'),
-        state: { scale: 40, pos: { x: 0, y: 0, z: 0 }, rot: { x: -90, y: 0, z: 0 } }
+        model: document.getElementById('gravity1'),
+        state: { scale: 25, pos: { x: -2, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0 } }
       },
       {
-        name: 'Hiro (gridlockreal_steel.glb)',
+        name: 'Hiro (gravity_destroyer_-_beyblade_metal_masters.glb)',
         el: document.querySelector('[preset="hiro"]'),
         model: document.getElementById('model3'),
-        state: { scale: 1.0, pos: { x: 0, y: 0, z: 0 }, rot: { x: -90, y: 0, z: 0 } }
+        state: { scale: 25, pos: { x: 0, y: 0, z: 0 }, rot: { x: -90, y: 0, z: 0 } }
       }
     ];
 
@@ -137,6 +207,32 @@
         if (activeMarker === m) {
           activeMarker = null;
           controls.classList.remove('visible');
+        }
+      });
+    });
+
+    // Add animation-mixer after models are loaded
+    const models = ['model1', 'gravity1', 'gravity2', 'model3'];
+    models.forEach(id => {
+      const el = document.getElementById(id);
+      el.addEventListener('model-loaded', () => {
+        // Manual animation setup following Three.js order
+        const gltf = el.components['gltf-model'].gltfData;
+        if (gltf && gltf.animations && gltf.animations.length > 0) {
+          // 2. Instanciar o Mixer passando gltf.scene
+          const mixer = new THREE.AnimationMixer(gltf.scene);
+          // 3. Criar a Action com mixer.clipAction(gltf.animations[0])
+          const action = mixer.clipAction(gltf.animations[0]);
+          // 4. Chamar .play() na action
+          action.play();
+          // Store mixer for updating
+          el.mixer = mixer;
+        }
+      });
+      // 5. Atualizar o mixer no loop principal
+      el.addEventListener('tick', (evt) => {
+        if (el.mixer) {
+          el.mixer.update(evt.delta / 1000); // Convert ms to seconds
         }
       });
     });
@@ -176,7 +272,39 @@
       document.getElementById(`rot${axis.toUpperCase()}Val`).textContent = r[axis];
     }
 
-    // No automatic animation: both models are displayed side-by-side under the kanji marker
+    // Battle activation on marker found/lost
+    markerConfig.forEach(m => {
+      if (m.name.includes('Kanji')) {
+        m.el.addEventListener('markerFound', () => {
+          const comp = m.el.components['beyblade-battle'];
+          if (comp) {
+            comp.active = true;
+            comp.phase = 0;
+            comp.timer = 0;
+            comp.fadeTarget = null;
+          }
+        });
+        m.el.addEventListener('markerLost', () => {
+          const comp = m.el.components['beyblade-battle'];
+          if (comp) {
+            comp.active = false;
+            // Reset positions and opacity
+            comp.pos1.copy(comp.startPos1);
+            comp.pos2.copy(comp.startPos2);
+            if (comp.gravity1) {
+              comp.gravity1.setAttribute('position', `${comp.pos1.x} ${comp.pos1.y} ${comp.pos1.z}`);
+              comp.gravity1.setAttribute('material', 'opacity: 1; transparent: false');
+            }
+            if (comp.gravity2) {
+              comp.gravity2.setAttribute('position', `${comp.pos2.x} ${comp.pos2.y} ${comp.pos2.z}`);
+              comp.gravity2.setAttribute('material', 'opacity: 1; transparent: false');
+            }
+          }
+        });
+      }
+    });
+
+    // Beyblade battle animation active on Kanji marker
   </script>
 </body>
 </html>
